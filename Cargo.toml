@@ -1,0 +1,19 @@
+license = "GPL-3.0-or-later"
+[profile.dev]
+opt-level = 3               # Use slightly better optimizations.
+
+[package]
+name = "iden"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bs58 = "0.5.1"
+ed25519-dalek = "2.1.1"
+hex = "0.4.3"
+indicatif = "0.17.11"
+rand = "0.9.0"
+rpassword = "7.3.1"
+sha2 = "0.10.8"
+threadpool = "1.8.1"
+
