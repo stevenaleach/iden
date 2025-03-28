@@ -1,6 +1,5 @@
 # iden  
 
-Work in progress.  Basically complete but it seems basenet.rs 'of'fer fails when not at home.
-Works great on localhost.. fails *almost* every time on a cloud VM pushing data from a Jupyter
-notebook at home.  I'm parking this all here in its current mysteriously broken state in hopes someone
-can see what's going on.
+This is a work in progress. Currently the rust 'basenet' service is unable to accept payloads when running on a Digital Ocean droplet.  Apparently it doesn't like leaving home.  The basic system is basically complete otherwise and I'm in the process of trying to work out the issue.
+
+The working draft of the actual REAMDE.md is not finished and not ready for public consumption but I've put the current version here anyway because a few people have offered to try to help and asked for specs... which is basically this text warty and incomplete as it is at this time.  
