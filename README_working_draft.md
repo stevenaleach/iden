@@ -85,12 +85,14 @@ There are three core message types:
 	## Building Services:
 	
 	The signal cache is a store that can be read quickly to access any recent signals registered to an iden. The signal is a sixty-four byte record space that may hold any information needed by any service to coordinate further action. In the *basenet* service, for instance, one or two payload keys can be registered in a signal (and up to 64 variations on signals which may contain the same keys).  
-	  
-	When a basenet node receives an *offer* message which offers for delivery content specified by iden, idx, and hashkey, it reads the signal (if any), doubles the signal field into a 128-byte array, and checks to see if the key is found in the resulting buffer (assuming it doesn't already have the record on file). If that record is not yet on file and the key (and hash of the payload) matches, then the record is immediately accepted.
-	
-		Note that all messages we've discussed so far are one-way — no 	
+
+   		Note that all messages we've discussed so far are one-way — no 	
 		acknowledgments or replies are needed. They're also compact (70 to 134 
 		bytes), making them UDP-friendly.
+  
+	When a basenet node receives an *offer* message which offers for delivery content specified by iden, idx, and hashkey, it reads the signal (if any), doubles the signal field into a 128-byte array, and checks to see if the key is found in the resulting buffer (assuming it doesn't already have the record on file). If that record is not yet on file and the key (and hash of the payload) matches, then the record is immediately accepted.
+	
+
 	
 	## Basenet:
 	
