@@ -159,169 +159,128 @@ pub fn listener(args: &[String]) {
                             println!("Received shutdown signal. Exiting basenet service.");
                             break;
                         }
-                        // Offer.
+
                         b"of" => {
-                            if n != 70 {
-                                eprintln!("Invalid 'offer' message length: {}", n);
-                                continue;
+                            if n < 70 {
+                                eprintln!("Invalid 'of' message length: {n}");
+                                return;
                             }
 
                             let iden = match Iden::try_from(&buffer[2..34]) {
                                 Ok(i) => i,
                                 Err(_) => {
-                                    eprintln!("Invalid iden format.");
-                                    continue;
+                                    eprintln!("Invalid iden in 'of' message.");
+                                    return;
                                 }
                             };
-                            let idx_bytes = &buffer[34..38];
-                            let hashkey = &buffer[38..70];
 
-                            let idx = u32::from_le_bytes(idx_bytes.try_into().unwrap());
-
-                            println!("Received OFFER:");
-                            println!("  iden   : {}", hex::encode(iden.to_bytes()));
-                            println!("  idx    : {}", idx);
-                            println!("  hashkey: {}", hex::encode(hashkey));
-
-                            let iden_array = &iden.to_bytes();
-                            println!("iden_array {:?}", iden_array);
-                            let shard_name = match util::shard(iden_array) {
+                            let shard = match util::shard(&iden.to_bytes()) {
                                 Some(name) => name,
                                 None => {
-                                    eprintln!("iden_array {:?}", iden_array);
-                                    eprintln!("No matching shard found for iden.");
-                                    continue;
+                                    eprintln!("No shard match for iden in 'of'.");
+                                    return;
                                 }
                             };
 
-                            println!("  shard  : {}", shard_name);
+                            let socket_path = format!(".iden/bn{}", shard);
+                            let mut ck_msg = vec![b'c', b'k'];
+                            ck_msg.extend_from_slice(&buffer[2..38]);
 
-                            // Request signal from mproc
-                            let socket_path = format!(".iden/{}", shard_name);
-                            let mut request = vec![b's', b'i'];
-                            request.extend_from_slice(&iden.to_bytes());
-                            request.extend_from_slice(&idx.to_le_bytes());
-
-                            let signal = match UnixStream::connect(&socket_path) {
+                            match UnixStream::connect(&socket_path) {
                                 Ok(mut unix_stream) => {
-                                    if unix_stream.write_all(&request).is_ok() {
-                                        let mut response = [0u8; 64];
-                                        if unix_stream.read_exact(&mut response).is_ok() {
-                                            Some(response)
-                                        } else {
-                                            None
+                                    if let Err(e) = unix_stream.write_all(&ck_msg) {
+                                        eprintln!("Failed to send 'ck' message to shard: {e:?}");
+                                        return;
+                                    }
+
+                                    let mut response = [0u8; 2];
+                                    match unix_stream.read_exact(&mut response) {
+                                        Ok(_) => {
+                                            if &response == b"YE" {
+                                                println!("Duplicate offer detected. Skipping.");
+                                                return;
+                                            }
                                         }
-                                    } else {
-                                        None
+                                        Err(e) => {
+                                            eprintln!("Error reading 'ck' response: {e:?}");
+                                            return;
+                                        }
                                     }
                                 }
                                 Err(e) => {
                                     eprintln!(
-                                        "Failed to connect to mproc {}: {:?}",
-                                        socket_path, e
+                                        "Failed to connect to shard socket {}: {e:?}",
+                                        socket_path
                                     );
-                                    None
+                                    return;
                                 }
-                            };
-
-                            let Some(signal) = signal else {
-                                eprintln!("Failed to retrieve signal from mproc.");
-                                continue;
-                            };
-
-                            println!("  signal : {}", hex::encode(signal));
-
-                            // Build double signal
-                            let mut double_signal = Vec::with_capacity(128);
-                            double_signal.extend_from_slice(&signal);
-                            double_signal.extend_from_slice(&signal);
-
-                            if double_signal.windows(32).any(|w| w == hashkey) {
-                                println!("  → Key Found");
-
-                                let split_chars = util::config("ss_split_chars")
-                                    .and_then(|s| s.parse::<usize>().ok())
-                                    .unwrap_or(4);
-                                let split_count = util::config("ss_split_count")
-                                    .and_then(|s| s.parse::<usize>().ok())
-                                    .unwrap_or(4);
-
-                                let content_path = iden.to_path(split_chars, split_count);
-                                println!("  → Content Path: {}", content_path);
-
-                                if !Path::new(&content_path).exists() {
-                                    eprintln!("  → Error: Content path does not exist.");
-                                    continue;
-                                }
-
-                                // Tell peer to proceed
-                                if stream.write_all(b"ok").is_err() {
-                                    eprintln!("Failed to send 'ok' to peer.");
-                                    continue;
-                                }
-
-                                // Read 2-byte payload length
-                                let mut len_buf = [0u8; 2];
-                                if stream.read_exact(&mut len_buf).is_err() {
-                                    eprintln!("Failed to read payload length from peer.");
-                                    continue;
-                                }
-                                let expected_len = u16::from_le_bytes(len_buf) as usize;
-
-                                //let mut buffer = vec![0u8; expected_len];
-                                let mut total_read = 0;
-
-                                let mut buffer = vec![0u8; expected_len];
-                                match stream.read_exact(&mut buffer) {
-                                    Ok(()) => {
-                                        println!("  → Received {} bytes", expected_len);
-
-                                        let hash = Sha256::digest(&buffer);
-                                        println!("  → SHA256: {}", hex::encode(hash));
-                                        if hash.as_slice() != hashkey {
-                                            eprintln!(
-                                                "  → Error: Payload hash does not match the provided hashkey."
-                                            );
-                                            continue;
-                                        }
-
-                                        store_payload(&content_path, &buffer, idx);
-                                    }
-                                    Err(e) => {
-                                        eprintln!("  → Failed to read exact payload: {:?}", e);
-                                    }
-                                }
-                                let mut buffer = vec![0u8; expected_len];
-                                match stream.read_exact(&mut buffer) {
-                                    Ok(()) => {
-                                        println!("  → Received {} bytes", expected_len);
-                                        println!(
-                                            "  → First bytes: {:02x?}",
-                                            &buffer[..buffer.len().min(32)]
-                                        );
-
-                                        let hash = Sha256::digest(&buffer);
-                                        println!("  → SHA256: {}", hex::encode(hash));
-
-                                        if hash.as_slice() != hashkey {
-                                            eprintln!(
-                                                "  → Error: Payload hash does not match the provided hashkey."
-                                            );
-                                            return;
-                                        }
-
-                                        store_payload(&content_path, &buffer, idx);
-                                    }
-                                    Err(e) => {
-                                        eprintln!(
-                                            "  → Failed to read exact payload ({} bytes): {:?}",
-                                            expected_len, e
-                                        );
-                                    }
-                                }
-                            } else {
-                                println!("  → Key Not Found");
                             }
+
+                            // extract idx and hashkey
+                            let idx = u32::from_le_bytes(buffer[34..38].try_into().unwrap());
+                            let hashkey = &buffer[38..70];
+
+                            let split_chars = util::config("ss_split_chars")
+                                .and_then(|s| s.parse::<usize>().ok())
+                                .unwrap_or(4);
+                            let split_count = util::config("ss_split_count")
+                                .and_then(|s| s.parse::<usize>().ok())
+                                .unwrap_or(4);
+
+                            let content_path = match Iden::try_from(&buffer[2..34]) {
+                                Ok(i) => i.to_path(split_chars, split_count),
+                                Err(_) => {
+                                    eprintln!("Failed to convert iden to path.");
+                                    return;
+                                }
+                            };
+
+                            // Length comes immediately after offer (70..72), then payload
+                            if n < 72 {
+                                eprintln!("Incomplete message — missing length bytes.");
+                                return;
+                            }
+
+                            let expected_len =
+                                u16::from_le_bytes(buffer[70..72].try_into().unwrap()) as usize;
+                            if n < 72 + expected_len {
+                                eprintln!(
+                                    "Incomplete message — missing full payload (have {}, need {}).",
+                                    n - 72,
+                                    expected_len
+                                );
+                                return;
+                            }
+
+                            let payload = &buffer[72..72 + expected_len];
+
+                            // Check hash
+                            let hash = Sha256::digest(payload);
+                            let hash = Sha256::digest(payload);
+                            let hash_hex = hex::encode(&hash);
+                            let key_hex = hex::encode(hashkey);
+
+                            println!("→ Attempting to store payload");
+                            println!("  Declared Length: {}", expected_len);
+                            println!("  Payload Length:  {}", payload.len());
+                            println!("  SHA256(payload): {}", hash_hex);
+                            println!("  Provided hashkey: {}", key_hex);
+
+                            if hash.as_slice() != hashkey {
+                                eprintln!(
+                                    "  → Error: Payload hash does not match the provided hashkey."
+                                );
+                                return;
+                            }
+
+                            println!("→ Attempting to store payload");
+                            println!("  Length declared: {}", expected_len);
+                            println!("  Actual slice size: {}", payload.len());
+                            println!("  SHA256: {}", hex::encode(Sha256::digest(payload)));
+                            println!("  Expected hashkey: {}", hex::encode(hashkey));
+
+                            store_payload(&content_path, payload, idx);
+                            return;
                         }
 
                         b"id" => {
@@ -679,7 +638,11 @@ fn handle_connection(mut stream: TcpStream) {
 
     let (iden_bytes, shard_name, is_offer) = match &buffer[..2] {
         b"of" => {
-            if n != 70 {
+            println!("→ BUFFER LEN = {}", n);
+            println!("→ BUFFER HEX  = {:02x?}", &buffer[..n]);
+            println!("→ BUFFER ASCII = {}", String::from_utf8_lossy(&buffer[..n]));
+
+            if n < 72 {
                 eprintln!("Invalid 'of' message length: {n}");
                 return;
             }
@@ -730,8 +693,61 @@ fn handle_connection(mut stream: TcpStream) {
                 }
             }
 
-            let iden_bytes = buffer[..70].to_vec();
-            (iden_bytes, format!("bn{}", shard), true)
+            //let iden_bytes = buffer[..70].to_vec();
+           // (iden_bytes, format!("bn{}", shard), true)
+           let idx = u32::from_le_bytes(buffer[34..38].try_into().unwrap());
+let hashkey = &buffer[38..70];
+
+let split_chars = util::config("ss_split_chars")
+    .and_then(|s| s.parse::<usize>().ok())
+    .unwrap_or(4);
+let split_count = util::config("ss_split_count")
+    .and_then(|s| s.parse::<usize>().ok())
+    .unwrap_or(4);
+
+let content_path = match Iden::try_from(&buffer[2..34]) {
+    Ok(i) => i.to_path(split_chars, split_count),
+    Err(_) => {
+        eprintln!("Failed to convert iden to path.");
+        return;
+    }
+};
+
+if n < 72 {
+    eprintln!("Incomplete message — missing length bytes.");
+    return;
+}
+
+let expected_len = u16::from_le_bytes(buffer[70..72].try_into().unwrap()) as usize;
+if n < 72 + expected_len {
+    eprintln!(
+        "Incomplete message — missing full payload (have {}, need {}).",
+        n - 72,
+        expected_len
+    );
+    return;
+}
+
+let payload = &buffer[72..72 + expected_len];
+let hash = Sha256::digest(payload);
+let hash_hex = hex::encode(&hash);
+let key_hex = hex::encode(hashkey);
+
+println!("→ Attempting to store payload");
+println!("  Declared Length: {}", expected_len);
+println!("  Payload Length:  {}", payload.len());
+println!("  SHA256(payload): {}", hash_hex);
+println!("  Provided hashkey: {}", key_hex);
+
+if hash.as_slice() != hashkey {
+    eprintln!("  → Error: Payload hash does not match the provided hashkey.");
+    return;
+}
+
+store_payload(&content_path, payload, idx);
+return;
+
+
         }
         b"id" => {
             let text = match std::str::from_utf8(&buffer[2..n]) {
