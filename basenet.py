@@ -110,8 +110,6 @@ class Frame:
 
     def to_bytes(self):
         return yaml.dump(self.body).encode()
-
-
 def Publish(body,
             page: int = 1,
             r: bytes = bytes([0] * 32),
@@ -155,22 +153,6 @@ def Publish(body,
             print(f"Error communicating with unix socket at {socket_path}: {e}")
             return b''
 
-    def tcp_deliver(offer, data):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((host, basenet_port))
-                s.sendall(offer)
-                resp = s.recv(2)
-                print("Response from basenet:", resp)
-                if resp == b"ok":
-                    length = len(data).to_bytes(2, 'little')
-                    s.sendall(length + data)
-                    print("Payload sent.")
-                else:
-                    print("Did not receive OK. Aborting.")
-        except Exception as e:
-            print("Delivery error:", e)
-
     padman = os.path.expanduser('~/.iden/padman')
     iden = unpack_state(unix_send(padman, b'id').decode())
     state = unix_send(padman, b'st')
@@ -197,7 +179,16 @@ def Publish(body,
     print(tcp_send(pr, signal_port))
 
     offer = offer_msg(iden, idx, datahash)
-    tcp_deliver(offer, full_payload)
+    length = len(full_payload).to_bytes(2, 'little')
+    combined = offer + length + full_payload
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((host, basenet_port))
+            s.sendall(combined)
+            print("→ Offer and payload sent in one chunk.")
+    except Exception as e:
+        print("Delivery error:", e)
 
     return offer, full_payload
 
@@ -261,7 +252,6 @@ async def handle_request(path: str, request: Request):
             return PlainTextResponse(f"[Error parsing content: {e}]")
 
     return PlainTextResponse(response)
-
 def expand_inline_iden_blocks(md_text: str) -> str:
     pattern = re.compile(r"(?<!\\):::\s*(iden://[^\s:]+(?:\.[0-9]+)?(?:/[^\s:]+)*)\s*:::", re.IGNORECASE)
 
