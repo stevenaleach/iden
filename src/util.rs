@@ -251,12 +251,6 @@ pub fn throttling_service() {
                                 }
                             };
 
-                            // Dedicate this IP to the given iden
-                            //println!(
-                            //    "IP {:?} dedicated to iden {:?}",
-                            //    ip,
-                            //    hex::encode(iden) // Display the iden as hex for logging
-                            //);
                             ip_store.insert(ip, (now, Some(iden)));
 
                             delay // Still enforce delay on first dedication
