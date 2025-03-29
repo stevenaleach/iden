@@ -321,10 +321,6 @@ pub fn generate_keys() {
         private_key_bytes[i] = random_byte();
     }
 
-    //    for i in 0..32 {
-    //        private_key_bytes[i] = rng.next_u32() as u8; // Use a range-safe random number
-    //    }
-
     let signing_key = SigningKey::from_bytes(&private_key_bytes);
     let verifying_key = signing_key.verifying_key();
 
