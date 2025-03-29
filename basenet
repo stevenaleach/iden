@@ -1,5 +1,8 @@
 #!/bin/bash
 # ~/bin/basenet
+# This exists because I hate having to type Python3 basenet.py and the script
+# can't run as a normal script (./basenet).  So I got tired of it and created
+# this.
 
 # Determine the script’s directory (in case you move it later)
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
