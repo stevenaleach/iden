@@ -10,7 +10,7 @@
 
 ### 1. Introduction
 
-**Note For GitHub**: *The "\"'s escaping any "iden://" in this text are there for peerpub rendering and should be ignored when reading on GitHub.*
+**Note For GitHub**: *The "\\"'s escaping any "iden://" in this text are there for peerpub rendering and should be ignored when reading on GitHub.*
 
 IDEN is a lightweight decentralized identity and publishing platform.
 
