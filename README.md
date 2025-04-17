@@ -10,6 +10,8 @@
 
 ### 1. Introduction
 
+**Note For GitHub**: *The "\"'s escaping any "iden://" in this text are there for peerpub rendering and should be ignored when reading on GitHub.*
+
 IDEN is a lightweight decentralized identity and publishing platform.
 
 It provides a small, efficient foundation for building distributed, coordinated systems around self-generated identities. An `iden` serves as a portable, public address—readable by anyone, writable only by its owner.
