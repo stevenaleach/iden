@@ -1,0 +1,9 @@
+!echo default startup script.
+start_mprocs
+start_basenets
+listener start
+peerstat start
+basenet_in start
+#!cargo run padman foo&
+quit
+

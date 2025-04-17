@@ -1,0 +1,8 @@
+#!/bin/bash
+# ~/bin/basenet
+
+# Determine the script’s directory (in case you move it later)
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+# Call the Python script using system Python
+exec python3 "$SCRIPT_DIR/basenet.py" "$@"

@@ -1,0 +1,8 @@
+!echo default shutdown script.
+stop_mprocs
+stop_basenets
+listener stop
+peerstat stop
+basenet_in stop
+padman stop
+quit
