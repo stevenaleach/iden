@@ -1,4 +1,4 @@
-**Note For GitHub**: *The "\\"'s escaping any "iden://" in this text are there for peerpub rendering and should be ignored when reading on GitHub.*  This paper lives live on the test node here: https://idens.net/iden://z1HRUsTNcYMkN5WPm9s1YjGaLUVs58RVRHPjBrV1kYwdAJ.642/pub <--- that's an open node, there to be tested and poked at and played with, published to and read from.
+**Note For GitHub**: *The "\\"'s escaping any "iden://" in this text are there for peerpub rendering and should be ignored when reading on GitHub.*  This paper is formated for "peerpub" rendering and lives live on the test node [here]:(https://idens.net/iden://z1HRUsTNcYMkN5WPm9s1YjGaLUVs58RVRHPjBrV1kYwdAJ.642/pub) <--- [that's](https://idens.net) an open node, there to be tested and poked at and played with, published to and read from.
 # <center>IDEN</center>
 *Steven A. Leach*   
 
