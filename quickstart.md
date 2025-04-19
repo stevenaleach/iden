@@ -53,7 +53,7 @@ iden store newpad.txt .iden/test.pad 500000  # Stores an encrypted checkpoint
 
 ```bash
 
-iden padman test  # Launches the pad manager, serving .iden/test.pad
+iden padman test & # Launches the pad manager, serving .iden/test.pad
 ```
 
 
