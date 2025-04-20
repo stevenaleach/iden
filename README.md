@@ -227,7 +227,7 @@ sudo apt install zenity
 **Python Dependencies**
 
 ```bash  
-pip install fastapi uvicorn pynacl pyyaml markdown  
+pip install fastapi uvicorn pynacl pyyaml markdown base58
 ```
 
 **Clone the repository and run the installation script:**
