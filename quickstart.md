@@ -6,7 +6,7 @@
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip3 install fastapi uvicorn pynacl pyyaml markdown
+pip3 install fastapi uvicorn pynacl pyyaml markdown base58
 ```
 
 
