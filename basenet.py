@@ -33,7 +33,7 @@ SIGNAL_PORT = 4004
 if not IS_PUBLIC_SERVER:
     REWRITE_LINK_PREFIX = "http://127.0.0.1:8008/" 
 else:
-    REWRITE_LINK_PREFIX = "https://idens.net/"
+    REWRITE_LINK_PREFIX = "https://example.net/"
 NODE_DIR = os.path.expanduser("~/.iden")
 PRIV = os.path.join(NODE_DIR, "private_key.bin")
 PUB  = os.path.join(NODE_DIR, "public_key.bin")
