@@ -1,7 +1,6 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
-#    IDEN 0.1.0,
-#    basenet.py
+#    IDEN basenet.py 0.1.1
 #
 #    Copyright (C) 2025 Steven A. Leach
 #
@@ -11,7 +10,7 @@
 #    (at your option) any later version.
 #
 #    See <https://www.gnu.org/licenses/> for details.
-# IDEN 0.1.0
+#
 # Unified basenet.py script (localhost and public server modes)
 # Copyright (C) 2025 Steven A. Leach
 
@@ -31,19 +30,21 @@ HTTP_HOST = "127.0.0.1"
 HTTP_PORT = 8008
 BASE_NET_PORT = 4040
 SIGNAL_PORT = 4004
-REWRITE_LINK_PREFIX = "http://127.0.0.1:8008/" if not IS_PUBLIC_SERVER else "https://idens.net/"
+if not IS_PUBLIC_SERVER:
+    REWRITE_LINK_PREFIX = "http://127.0.0.1:8008/" 
+else:
+    REWRITE_LINK_PREFIX = "https://idens.net/"
 NODE_DIR = os.path.expanduser("~/.iden")
 PRIV = os.path.join(NODE_DIR, "private_key.bin")
 PUB  = os.path.join(NODE_DIR, "public_key.bin")
-SIGNAL_PORT = 4004
-BASE_NET_PORT = 4040
 NODES_TXT = os.path.join(NODE_DIR, "nodes.txt")
 PREVIEW_DIR = os.path.expanduser("~/drafts")
 HOMEPAGE_FILE = "README.md"
+MAX_SIGPROX_THREADS = 32
 
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Global "iden" and "state" utility functions
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 def crypt_state(state,password):
     ''' Encrypt (or decrypt) a state by xor of password hash. '''
     from hashlib import sha256
@@ -97,10 +98,20 @@ def print_state(state):
         print(s[:4].upper(), end=' ');s = s[4:]; i+=1
     print('\n')
 
+def get_url(host, iden_str, idx = None,pub=True,home=False):
+    s = host+"/iden://"+iden_str
+    if idx:
+        s+="."+str(idx)
+    else:
+        if home:
+            s+=".0"
+    if pub:
+        s+="/pub"
+    return(s)
 
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Pad Manager functions
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 class PadMan:
     SOCKET_PATH = os.path.expanduser("~/.iden/padman")
 
@@ -147,17 +158,29 @@ class PadMan:
         return(pack_state(PadMan.state_bin()))
 
     @staticmethod
+    def url(idx = 0,host="http://127.0.0.1:8008",pub=True, home=False):
+        s = host+"/iden://"+PadMan.iden_str()
+        if idx:
+            s+="."+str(idx)
+        else:
+            if home:
+                s+=".0"
+        if pub:
+            s+="/pub"
+        print(s)
+        return(s)
+
+    @staticmethod
     def shutdown():
         """Sends a shutdown signal to the padman service."""
         PadMan._send(b'qu')
 
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # BaseNet helper functions
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 class BaseNet:
     HOST = "127.0.0.1"
-    PORT = 4040
-
+    PORT = BASE_NET_PORT 
     @staticmethod
     def _send_tcp(data: bytes, host: str = None, port: int = None) -> bytes:
         host = host or BaseNet.HOST
@@ -178,20 +201,26 @@ class BaseNet:
 
     @staticmethod
     def deliver(blob: bytes, host: str = None, port: int = None) -> bytes:
-        """Send a preassembled 'offer + length + payload' blob to the specified basenet node."""
-        return BaseNet._send_tcp(blob, host or BaseNet.HOST, port or BaseNet.PORT)
+        """Send a preassembled 'offer + length + payload' blob to the specified
+        basenet node."""
+        return(BaseNet._send_tcp(blob, 
+                                 host or BaseNet.HOST, port or BaseNet.PORT))
 
     @staticmethod
     def get(uri: str, host: str = None, port: int = None) -> bytes:
+        host = host or BaseNet.HOST
+        port = port or BaseNet.PORT
         if not uri.startswith("iden://"):
             raise ValueError("URI must start with iden://")
         return BaseNet._send_tcp(b"id" + uri.encode(), host, port)
 
     @staticmethod
-    def get_from(iden_str: str, idx: int, host: str = None, port: int = None) -> tuple[int, bytes] | None:
+    def get_from(iden_str: str, idx: int, host: str = None, 
+                 port: int = None) -> tuple[int, bytes] | None:
         """
-        Attempts to retrieve a basenet frame for the given iden string and index.
-        Walks backwards from idx to 0 if not found. Returns (idx, data) on success, None if not found.
+        Attempts to retrieve a basenet frame for the given iden string and
+        index. Walks backwards from idx to 0 if not found. Returns (idx, data)
+        on success, None if not found.
         """
         host = host or BaseNet.HOST
         port = port or BaseNet.PORT
@@ -203,13 +232,12 @@ class BaseNet:
                 return (i, response)
         return None
 
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Iden Signaling Layer functions
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 class IdenSignal:
     HOST = "127.0.0.1"
-    PORT = 4004
-
+    PORT = SIGNAL_PORT
     @staticmethod
     def send_msg(data: bytes, host: str = HOST, port: int = PORT) -> bytes:
         """Send a raw message to the IdenSignal TCP interface."""
@@ -233,6 +261,8 @@ class IdenSignal:
     @staticmethod
     def report(host: str = HOST, port: int = PORT) -> bytes:
         """Send a 'report' (re) message using iden and state from PadMan."""
+        host = host or IdenSignal.HOST
+        port = port or IdenSignal.PORT
         iden = PadMan.iden_bin()
         state = PadMan.state_bin()
         msg = b"re" + iden + state
@@ -241,6 +271,8 @@ class IdenSignal:
     @staticmethod
     def dedicate(host: str = HOST, port: int = PORT) -> bytes:
         """Send a 'dedicate' (de) message using iden and state from PadMan."""
+        host = host or IdenSignal.HOST
+        port = port or IdenSignal.PORT
         iden = PadMan.iden_bin()
         state = PadMan.state_bin()
         msg = b"de" + iden + state
@@ -248,43 +280,63 @@ class IdenSignal:
 
     @staticmethod
     def msg_count_t(t: float, host: str = HOST, port: int = PORT) -> int:
-        """Send a 'ct' (count) message for the past `t` seconds. Returns number of messages seen."""
-        payload = b"ct" + struct.pack("<d", t)  # < = little-endian, d = float64
+        """Send a 'ct' (count) message for the past `t` seconds. Returns number
+        of messages seen."""
+        host = host or IdenSignal.HOST
+        port = port or IdenSignal.PORT
+        payload = b"ct" + struct.pack("<d", t) # <= little-endian, d = float64
         response = IdenSignal.send_msg(payload, host, port)
         if len(response) >= 4:
             return int.from_bytes(response[:4], "little")
         return -1
 
-    def get_messages(t: float, host: str = "127.0.0.1", port: int = 4004) -> int:
+    @staticmethod
+    def get_messages(t: float, host: str = HOST, 
+                     port: int = PORT):
         """Send a 'gt' (get_t) to get message for the past `t` seconds."""
-        payload = b"gt" + struct.pack("<d", t)  # < = little-endian, d = float64
+        host = host or IdenSignal.HOST
+        port = port or IdenSignal.PORT
+        payload = b"gt" + struct.pack("<d", t)  # <= little-endian, d = float64
         response = IdenSignal.send_msg(payload, host=host, port=port)
         if len(response) < 70:
             return((0,None))
         size = int.from_bytes(response[:4],"little")
         return(size,response[4:])
 
+    @staticmethod
     def idx(iden: bytes, host = "127.0.0.1", port = 4004) -> int:
+        host = host or IdenSignal.HOST
+        port = port or IdenSignal.PORT
         response = IdenSignal.send_msg(b'ix'+iden, host=host, port=port)
         if len(response) < 4:
             return(None)
         return( int.from_bytes(response[:4],"little") )
 
+    @staticmethod
     def state(iden: bytes, host = "127.0.0.1", port = 4004) -> int:
+        host = host or IdenSignal.HOST
+        port = port or IdenSignal.PORT
         response = IdenSignal.send_msg(b'st'+iden, host=host, port=port)
         if len(response) < 4:
             return(None)
         return(response)
 
+    @staticmethod
     def signal(iden:bytes, idx:int, host="127.0.0.1", port =4004) -> bytes:
-        return(IdenSignal.send_msg(b'si'+iden+idx.to_bytes(4,'little'),host=host,port=port ))
+        host = host or IdenSignal.HOST
+        port = port or IdenSignal.PORT
+        return(IdenSignal.send_msg(b'si'+iden+idx.to_bytes(4,'little'),
+                                   host=host,port=port ))
 
+    @staticmethod
     def version(host = None, port = None) -> str:
+        host = host or IdenSignal.HOST
+        port = port or IdenSignal.PORT
         return(IdenSignal.send_msg(b've', host=host, port=port))
 
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # BaseNet Frame Class
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 class Frame:
     def __init__(self,
                  content: dict = None,
@@ -331,7 +383,10 @@ class Frame:
             return None
 
     def app(self, appstr: str):
-        current_apps = set(filter(None, (s.strip() for s in self.body.get("app", "").split(","))))
+        current_apps = set(
+                filter(None, 
+                       (s.strip() for s in self.body.get("app", 
+                                                         "").split(","))))
         current_apps.add(appstr.strip())
         self.body["app"] = ",".join(sorted(current_apps))
 
@@ -341,21 +396,26 @@ class Frame:
 
     def backlink(self, host: str = "127.0.0.1", port: int = 4040):
         """
-        Add a backlink to the previous frame (if any) by resolving the most recent
-        earlier frame and storing its idx and SHA256 hash.
+        Add a backlink to the previous frame (if any).
+
+        Returns
+        -------
+        bool
+            True if a backlink was added, False otherwise.
         """
+
         iden_str = PadMan.iden_str()
         current_idx = PadMan.idx()
 
         if current_idx <= 0:
             print("No previous frame to link to (idx = 0).")
-            return
+            return(False)
 
         result = BaseNet.get_from(iden_str, current_idx - 1, host, port)
 
         if result is None:
             print("No previous frame found.")
-            return
+            return(False)
 
         prev_idx, prev_data = result
         prev_hash = sha256(prev_data).hexdigest()
@@ -365,12 +425,15 @@ class Frame:
             'hash': prev_hash
         }
         print(f"Added backlink to idx {prev_idx}, hash {prev_hash}")
+        return(True)
 
 
-    def backpub(self, host: str = "127.0.0.1", port: int = 4040, appkey="peerpub"):
+    def backpub(self, host: str = "127.0.0.1", 
+                port: int = 4040, appkey="peerpub"):
         """
-        Search backward from the current idx until a frame with 'peerpub' in its app field is found.
-        If found, add a text.md file linking to that frame and record its idx in 'lastpub'.
+        Search backward from the current idx until a frame with 'peerpub' in
+        its app field is found. If found, add a text.md file linking to that
+        frame and record its idx in 'lastpub'.
         """
         iden_str = PadMan.iden_str()
         current_idx = PadMan.idx()
@@ -383,10 +446,11 @@ class Frame:
             try:
                 parts = data.decode().split("---\n", 1)
                 if len(parts) != 2:
-                    raise ValueError("Expected YAML header followed by content after '---'")
+                    raise ValueError(
+                            "Expected YAML header followed by '---'")
                 parsed = yaml.safe_load(parts[1])
                 if not isinstance(parsed, dict):
-                    print(f"Unexpected YAML root type at idx {i}: {type(parsed)}")
+                    print(f"Bad YAML at idx {i}: {type(parsed)}")
                     continue
             except Exception as e:
                 print(f"Failed to parse YAML content at idx {i}: {e}")
@@ -432,16 +496,16 @@ class Frame:
         if "text.md" in self.body:
             self.body["text.md"] = self.body["text.md"]+"\n\n"+self.ban+"\n"
 
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # BaseNet Publisher Function
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 def Publish(body,
             page: int = 1,
             r: bytes = bytes([0] * 32),
             host: str = "127.0.0.1",
-            signal_port: int = 4004,
-            basenet_port: int = 4040,
-            send = True,
+            signal_port: int = SIGNAL_PORT,
+            basenet_port: int = BASE_NET_PORT,
+            send = False,
             sleep=0.0):
 
     import time
@@ -479,7 +543,7 @@ def Publish(body,
                 client.sendall(data)
                 return client.recv(65536)
         except Exception as e:
-            print(f"Error communicating with unix socket at {socket_path}: {e}")
+            print(f"Error with unix socket at {socket_path}: {e}")
             return b''
 
     padman = os.path.expanduser('~/.iden/padman')
@@ -561,8 +625,7 @@ def rewrite_iden_links(md_text: str, prefix: str = REWRITE_LINK_PREFIX) -> str:
 
         # Handle unescaped "iden://
         if md_text[i:i+7] == 'iden://':
-            # Check what's immediately before this position
-            if i == 0 or md_text[i-1] in ' \t\n([{"\'':  # allowed preceding characters
+            if i == 0 or md_text[i-1] in ' \t\n([{"\'':  
                 output += prefix + 'iden://'
                 i += 7
                 continue
@@ -580,7 +643,8 @@ def rewrite_iden_links(md_text: str, prefix: str = REWRITE_LINK_PREFIX) -> str:
 
 
 def expand_blockquote_iden_blocks(md_text: str) -> str:
-    pattern = re.compile(r"(?<!\\)\|\|\|\s*(iden://[^\s|]+(?:\.[0-9]+)?(?:/[^\s|]+)*)\s*\|\|\|", re.IGNORECASE)
+    pattern = re.compile(r"(?<!\\)\|\|\|\s*(iden://[^\s|]+(?:\.[0-9]+)?(?:/[^\s|]+)*)\s*\|\|\|", 
+                         re.IGNORECASE)
     count = 0
     def expand(match):
         nonlocal count
@@ -612,7 +676,8 @@ def expand_blockquote_iden_blocks(md_text: str) -> str:
     return pattern.sub(expand, md_text)
 
 def expand_inline_iden_blocks(md_text: str) -> str:
-    pattern = re.compile(r"(?<!\\):::\s*(iden://[^\s:]+(?:\.[0-9]+)?(?:/[^\s:]+)*)\s*:::", re.IGNORECASE)
+    pattern = re.compile(r"(?<!\\):::\s*(iden://[^\s:]+(?:\.[0-9]+)?(?:/[^\s:]+)*)\s*:::", 
+                         re.IGNORECASE)
     count = 0
     def expand(match):
         nonlocal count
@@ -699,7 +764,8 @@ def extract_meta(md_text: str) -> tuple[str, str]:
 
 
 #def render_markdown_as_html(md_text: str, title: str = None) -> HTMLResponse:
-def render_markdown_as_html(md_text: str, title: str = None, meta: dict = None) -> HTMLResponse:
+def render_markdown_as_html(
+        md_text: str, title: str = None, meta: dict = None) -> HTMLResponse:
     expanded_md = expand_inline_iden_blocks(md_text)
     expanded_md = expand_blockquote_iden_blocks(expanded_md)
     rewritten_md = rewrite_iden_links(expanded_md)
@@ -925,9 +991,11 @@ async def handle_request(path: str, request: Request):
             full_path = os.path.join(PREVIEW_DIR, filename)
             with open(full_path, "r", encoding="utf-8") as f:
                 md_text = f.read()
-            return render_markdown_as_html(md_text, title=f"Preview: {filename}")
+            return render_markdown_as_html(
+                    md_text, title=f"Preview: {filename}")
         except Exception as e:
-            return PlainTextResponse(f"Error reading preview file: {e}", status_code=400)
+            return PlainTextResponse(
+                    f"Error reading preview file: {e}", status_code=400)
 
     if not path.startswith("iden://"):
         return PlainTextResponse("Invalid request format", status_code=400)
@@ -956,77 +1024,214 @@ async def handle_request(path: str, request: Request):
             elif isinstance(yml, (int, float)):
                 return PlainTextResponse(str(yml))
             else:
-                return PlainTextResponse(yaml.dump(yml, default_flow_style=False))
+                return PlainTextResponse(yaml.dump(yml, 
+                                                   default_flow_style=False))
 
         except Exception as e:
             return PlainTextResponse(f"[Error parsing content: {e}]")
     return PlainTextResponse(response)
 
+def display_page(url, height=600):
+    """
+    Display a web-page from a full HTTP/HTTPS URL, sandboxed in Jupyter.
+    """
+    from IPython.display import display, HTML
+    import html
+    iframe_html = f"""
+    <iframe src="{html.escape(url)}"
+            style="width: 100%; height: {height}px; border: none;"
+            loading="lazy"
+            sandbox="allow-scripts allow-same-origin allow-popups">
+    </iframe>
+    """
+    display(HTML(iframe_html))
 
+#------------------------------------------------------------------------------
+# SigProx Wrappers
+#------------------------------------------------------------------------------
+class SigProx:
 
-def sigprox_send(msg: bytes, node:bytes = None ,host="127.0.0.1", port=8044) -> bytes:
-    # Load keys from ~/.iden
-    base = os.path.expanduser("~/.iden")
-    with open(os.path.join(base, "private_key.bin"), "rb") as f:
-        sk = SigningKey(f.read())
-    pk = sk.verify_key
-    my_id = pk.encode()
+    @staticmethod
+    def send(msg: bytes, node:bytes = None ,host="127.0.0.1", 
+             port=8044) -> bytes:
+        # Load keys from ~/.iden
+        base = os.path.expanduser("~/.iden")
+        with open(os.path.join(base, "private_key.bin"), "rb") as f:
+            sk = SigningKey(f.read())
+        pk = sk.verify_key
+        my_id = pk.encode()
 
-    # Client to Node.
-    # 1. [0][ID 32][CHALLENGE 64]
-    #
-    challenge1 = os.urandom(64)
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((host, port))
-    s.sendall(b"\x00" + my_id + challenge1)
+        # Client to Node.
+        # 1. [0][ID 32][CHALLENGE 64]
+        #
+        challenge1 = os.urandom(64)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((host, port))
+        s.sendall(b"\x00" + my_id + challenge1)
 
-    # Node to Client.
-    # 2. [ID 32][SIG 64(CHALLENGE)][CHALLENGE 64]
-    #
-    server_id = s.recv(32)
-    if node:
-        if not server_id == node:
-            print("Node ID Does Not Match.")
+        # Node to Client.
+        # 2. [ID 32][SIG 64(CHALLENGE)][CHALLENGE 64]
+        #
+        server_id = s.recv(32)
+        if node:
+            if not server_id == node:
+                print("Node ID Does Not Match.")
+                s.close()
+                return(None)
+        sig1 = s.recv(64)
+        challenge2 = s.recv(64)
+        try:
+            VerifyKey(server_id).verify(challenge1, sig1)
+        except BadSignatureError:
+            s.close()
+            print("Bad server signature in handshake")
             return(None)
-    sig1 = s.recv(64)
-    challenge2 = s.recv(64)
-    try:
-        VerifyKey(server_id).verify(challenge1, sig1)
-    except BadSignatureError:
+        # # Client to Node.
+        # 3. [SIG 64(CHALLENGE+MESSAGE)][length 3 byte le][MSG]
+        #
+        signed = sk.sign(challenge2 + msg)
+        length = len(msg).to_bytes(3, "little")
+        s.sendall(signed.signature + length + msg)
+
+        # Node to Client
+        # 4. [SIG 64(T+MSG_HASH+RESPONSE)][T][MSG_HASH][RESPONSE]
+        #
+        sig2 = s.recv(64)
+        t_raw = s.recv(8)
+        t = struct.unpack("<d", t_raw)[0]
+        hash_msg = s.recv(32)
+        response = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+
+        blob = t_raw + hash_msg + response
+        try:
+            VerifyKey(server_id).verify(blob, sig2)
+        except BadSignatureError:
+            print("Bad signature on response")
+            return(None)
+        if sha256(msg).digest() != hash_msg:
+            print("Hash mismatch")
+            return(None)
         s.close()
-        raise Exception("Bad server signature in handshake")
+        return({"response":response,"node_id": server_id,
+                "t":t,"sig":sig2,"msg_hash":hash_msg})
 
-    # # Client to Node.
-    # 3. [SIG 64(CHALLENGE+MESSAGE)][length 3 byte le][MSG]
-    #
-    signed = sk.sign(challenge2 + msg)
-    length = len(msg).to_bytes(3, "little")
-    s.sendall(signed.signature + length + msg)
+    @staticmethod
+    def report(host="127.0.0.1",port=8044,node=None):
+        iden = PadMan.iden_bin()
+        state = PadMan.state_bin()
+        msg = b"re" + iden + state
+        response = SigProx.send(msg,host=host,port=port,node=node)
+        if response:
+            i = response["response"][:1]
+            return(int.from_bytes(i,"little"),response)
+        return(None)
 
-    # Node to Client
-    # 4. [SIG 64(T+MSG_HASH+RESPONSE)][T][MSG_HASH][RESPONSE]
-    #
-    sig2 = s.recv(64)
-    t_raw = s.recv(8)
-    t = struct.unpack("<d", t_raw)[0]
-    hash_msg = s.recv(32)
-    response = b""
-    while True:
-        chunk = s.recv(4096)
-        if not chunk:
-            break
-        response += chunk
+    @staticmethod
+    def msg_count(t: float, host: str = "127.0.0.1", 
+                  port: int = 8044, node=None) -> int:
+        """Send a 'ct' (count) message for the past `t` seconds. 
+        Returns number of messages seen."""
+        payload = b"ct" + struct.pack("<d", t) # <= little-endian, d = float64
+        response = SigProx.send(payload, host=host, port=port,node=node)
+        if response:
+            i = response["response"]
+            i = int.from_bytes(i, "little")
+            return(i,response)
+        return(None)
 
-    blob = t_raw + hash_msg + response
-    try:
-        VerifyKey(server_id).verify(blob, sig2)
-    except BadSignatureError:
-        raise Exception("Bad signature on response")
-    if sha256(msg).digest() != hash_msg:
-        raise Exception("Hash mismatch")
+    @staticmethod
+    def get_messages(t: float, host: str = "127.0.0.1", 
+                     port: int = 8044,node=None):
+        """Send a 'gt' (get_t) to get message for the past `t` seconds."""
+        payload = b"gt" + struct.pack("<d", t) # <= little-endian, d = float64
+        RESPONSE = SigProx.send(payload, host=host, port=port,node=node)
+        if RESPONSE:
+            response = RESPONSE["response"]
+            if not response:
+                return(None)
+            if len(response) < 70:
+                return(None)
+            size = int.from_bytes(response[:4],"little")
+            return(size,response[4:],RESPONSE)
+        return(None)
 
-    s.close()
-    return({"response":response,"node_id": server_id,"t":t,"sig":sig2,"msg_hash":hash_msg})
+    @staticmethod
+    def idx(iden: bytes, host = "127.0.0.1", port = 8044, node = None) -> int:
+        RESPONSE = SigProx.send(b'ix'+iden, host=host, port=port, node=node)
+        if RESPONSE:
+            response = RESPONSE["response"]
+            if not response:
+                return(None)
+            if len(response) < 4:
+                return(None)
+            return( int.from_bytes(response[:4],"little"),RESPONSE )
+        return(None)
+
+    @staticmethod
+    def state(iden: bytes, host = "127.0.0.1", port = 8044, node=None) -> int:
+        RESPONSE = SigProx.send(b'st'+iden, host=host, port=port,node=node)
+        if RESPONSE:
+            response = RESPONSE["response"]
+            if len(response) < 32:
+                return(None)
+            return(response, RESPONSE)
+        return(None)
+
+    @staticmethod
+    def signal(iden:bytes, idx:int, host="127.0.0.1", 
+               port =8044, node=None) -> bytes:
+        RESPONSE = SigProx.send(b'si'+iden+idx.to_bytes(4,'little'),
+                                host=host,port=port,node=node)
+        if RESPONSE:
+            response = RESPONSE["response"]
+            if len(response) < 64:
+                return(None)
+            return(response,RESPONSE)
+        return(None)
+
+    @staticmethod
+    def version(host = "127.0.0.1", port = 8044,node=None) -> str:
+        RESPONSE = SigProx.send(b've', host=host, port=port,node=node)
+        if RESPONSE:
+            return(RESPONSE["response"],RESPONSE)
+        return(None)
+
+    @staticmethod
+    def get(uri: str, host: str = "127.0.0.1", 
+            port: int = 8044, node=None) -> bytes:
+        if not uri.startswith("iden://"):
+            print("URI must start with iden://")
+            return(None)
+        RESPONSE = SigProx.send(b"id" + uri.encode(), 
+                                host=host, port=port,node=node)
+        if RESPONSE:
+            response = RESPONSE["response"]
+            return(response, RESPONSE)
+        return(None)
+
+    @staticmethod
+    def get_from(iden_str: str, idx: int, host: str = "127.0.0.1", 
+                 port: int = 8044, node=None) -> tuple[int, bytes] | None:
+        """
+        Attempts to retrieve a basenet frame for the given iden string and
+        index. Walks backwards from idx to 0 if not found. Returns (idx, data)
+        on success, None if not found. """
+        for i in range(idx+1, -1, -1):
+            uri = f"iden://{iden_str}.{i}"
+            RESPONSE = SigProx.send(b"id" + uri.encode(), host=host, 
+                                    port=port,node=node)
+            if RESPONSE:
+                response = RESPONSE["response"]
+                if response and not response.startswith(b"!"):
+                    return (i, response, RESPONSE)
+            else:
+                return(None)
+        return(None)
 
 # --- Entrypoint ---
 
@@ -1051,7 +1256,9 @@ if __name__ == "__main__":
 
         # --- Service Dispatch ---
         def proxy_forward(msg: bytes) -> bytes:
-            if msg.startswith((b"cl", b"pr", b"re", b"si", b"ix", b"st", b"ct", b"gt", b"de", b"ve")):
+            if msg.startswith(
+                    (b"cl", b"pr", b"re", b"si", 
+                     b"ix", b"st", b"ct", b"gt", b"de", b"ve")):
                 port = SIGNAL_PORT
             elif msg.startswith((b"id",b"of")):
                 print("basenet")
@@ -1072,7 +1279,6 @@ if __name__ == "__main__":
             except Exception as e:
                 return f"!error: {e}".encode()
 
-
         # --- Threaded Handler ---
         def proxy_handle_client(conn, addr):
             with conn:
@@ -1092,16 +1298,15 @@ if __name__ == "__main__":
                         return
                     challenge2 = os.urandom(64)
                     sig1 = sk.sign(challenge1).signature
-                    # Node to Client.
+                    # 2. Node to Client.
                     # [ID 32][SIG 64(CHALLENGE)][CHALLENGE 64]
                     #
                     conn.sendall(vk.encode() + sig1 + challenge2)
-                    # # Client to Node.
+                    # 3. # Client to Node.
                     # [SIG 64(CHALLENGE+MESSAGE)][length 3 byte le][MSG]
                     #
                     sig2 = conn.recv(64)
                     length_bytes = conn.recv(3)
-                    print("length",length_bytes)
                     length = int.from_bytes(length_bytes, "little")
                     msg = b""
                     while len(msg) < length:
@@ -1118,12 +1323,32 @@ if __name__ == "__main__":
 
                     # Forward
                     #print("msg",msg)
+                    # Throttle if applicable
+                    if msg[:2] in [b"cl", b"pr", b"re", b"de"] and len(msg) >= 70:
+                        ip_str = addr[0]
+                        try:
+                            ip_bytes = socket.inet_aton(ip_str)
+                            iden = msg[2:34]
+                            throttle_msg = b"??" + ip_bytes + iden
+                            with socket.socket(
+                                    socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                                s.connect(os.path.expanduser(
+                                    "~/.iden/throttle"))
+                                s.sendall(throttle_msg)
+                                delay = s.recv(8)
+                                delay_secs = struct.unpack("<d", delay)[0]
+                                if delay_secs > 0:
+                                    print(f"SigProx Throttling {ip_str} {delay_secs:.3f} sec")
+                                    time.sleep(delay_secs)
+                        except Exception as e:
+                            print(f"[SigProx] Throttle error for {ip_str}: {e}")
+
                     payload = proxy_forward(msg)
                     now = struct.pack("<d", time.time())
                     h = sha256(msg).digest()
                     blob = now + h + payload
                     sig = sk.sign(blob).signature
-                    # Node to Client
+                    # 4. Node to Client
                     # [SIG 64(T+MSG_HASH+RESPONSE)][T][MSG_HASH][RESPONSE]
                     #
                     conn.sendall(sig + blob)
@@ -1134,7 +1359,7 @@ if __name__ == "__main__":
         def proxy_serve():
             HOST = "0.0.0.0"
             PORT = 8044
-            MAX_WORKERS = 8
+            MAX_WORKERS = MAX_SIGPROX_THREADS
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -1147,7 +1372,7 @@ if __name__ == "__main__":
         print("Signing Proxy Started")
         proxy_serve()
 
-
     else:
         print(f"Starting basenet web service on http://{HTTP_HOST}:{HTTP_PORT}")
         uvicorn.run(app, host=HTTP_HOST, port=HTTP_PORT)
+
