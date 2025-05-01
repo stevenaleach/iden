@@ -876,8 +876,8 @@ impl ClaimCache {
         entry.0 = now;
         let claims = &mut entry.1;
 
-        // Remove expired claims and those with lower `n`
-        claims.retain(|c| now - c.timestamp < self.max_age && c.n >= n);
+        // Remove expired claims
+        claims.retain(|c| now - c.timestamp < self.max_age);
 
         // Check if claim already exists
         if !claims.iter().any(|c| c.mix == mix && c.n == n) {
